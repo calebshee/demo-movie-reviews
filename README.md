@@ -3,6 +3,29 @@
 Read and write reviews of **English-language films now showing in Singapore cinemas**.
 Anyone can browse; posting, editing or deleting a review requires an account.
 
+## Try the demo (no setup)
+
+```bash
+npm install
+npm run demo        # http://localhost:5173, sample data, no Supabase or TMDB needed
+```
+
+Demo mode runs the real UI against in-browser sample data (invented films and
+reviews, saved in `localStorage`). Any email and password signs you in. Things to try:
+
+1. **Browse** the now-showing grid; switch **Sort by → Community rating**.
+2. **Search** "low" to find a film that has left cinemas (still reviewable).
+3. Open **Midnight Harbour**: community rating first, TMDB second; page through 24 reviews.
+4. **Log in to write a review** → *Create an account* → you land back on the film.
+5. **Post** a rating, then **Edit** it and watch the community rating change; **Delete** it.
+6. **Profile**: rename yourself; your reviews show the new name.
+7. **Reset demo** (top banner) restores the sample data.
+
+`npm run build:demo` produces a static demo build in `dist/`. How it works:
+`vite --mode demo` aliases `src/lib/{api,auth,supabase}.ts` to `src/demo/`, which
+export the same functions (checked at compile time) and enforce the same rules as the
+database. Production builds contain no demo code.
+
 ## Architecture
 
 ```

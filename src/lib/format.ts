@@ -1,7 +1,10 @@
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
+/** Full URLs (demo mode's generated data: posters) pass through; TMDB paths get the CDN prefix. */
+const isFullUrl = (path: string) => /^(data:|https?:)/.test(path);
+
 export const posterUrl = (path: string | null, size: 'w342' | 'w500' = 'w342') =>
-  path ? `${TMDB_IMAGE_BASE}/${size}${path}` : null;
+  path ? (isFullUrl(path) ? path : `${TMDB_IMAGE_BASE}/${size}${path}`) : null;
 
 export const backdropUrl = (path: string | null) => (path ? `${TMDB_IMAGE_BASE}/w1280${path}` : null);
 

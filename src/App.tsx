@@ -2,6 +2,7 @@ import { HashRouter, Link, NavLink, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider.tsx';
 import { isConfigured } from './lib/supabase.ts';
 import { ConfigNotice } from './components/Notices.tsx';
+import { DemoBanner, isDemo } from './components/DemoBanner.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { MoviePage } from './pages/MoviePage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
@@ -13,6 +14,7 @@ export function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        {isDemo && <DemoBanner />}
         <Header />
         <main className="container">
           {isConfigured ? (
