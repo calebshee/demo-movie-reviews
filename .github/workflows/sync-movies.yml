@@ -1,0 +1,37 @@
+name: Sync now-showing films
+
+on:
+  schedule:
+    # 21:30 UTC = 05:30 Singapore time, before the day's first screenings.
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Fetch from TMDB and print, without writing to the database
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-movies
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run sync
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TMDB_READ_TOKEN: ${{ secrets.TMDB_READ_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
