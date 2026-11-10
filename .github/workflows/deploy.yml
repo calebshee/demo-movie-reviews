@@ -24,7 +24,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run build
+      # Until Supabase is configured the site serves the demo build (sample data,
+      # in-browser) instead of a "setup needed" notice. Setting both repository
+      # variables switches the next deploy to the real app.
+      - name: Build
+        run: |
+          if [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+            npm run build
+          else
+            echo "::notice title=Demo build::SUPABASE_URL / SUPABASE_ANON_KEY are not set, so the demo build is deployed."
+            npm run build:demo
+          fi
         env:
           # Public values (the anon key is protected by Row Level Security); stored as
           # repository variables, not secrets, because they end up in the bundle anyway.

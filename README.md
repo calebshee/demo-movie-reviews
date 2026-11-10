@@ -21,7 +21,9 @@ reviews, saved in `localStorage`). Any email and password signs you in. Things t
 6. **Profile**: rename yourself; your reviews show the new name.
 7. **Reset demo** (top banner) restores the sample data.
 
-`npm run build:demo` produces a static demo build in `dist/`. How it works:
+`npm run build:demo` produces a static demo build in `dist/`. The Pages deploy uses it
+automatically while the `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository variables are
+unset, so the live site is a working demo until the real backend is configured. How it works:
 `vite --mode demo` aliases `src/lib/{api,auth,supabase}.ts` to `src/demo/`, which
 export the same functions (checked at compile time) and enforce the same rules as the
 database. Production builds contain no demo code.
