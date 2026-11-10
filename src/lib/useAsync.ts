@@ -13,7 +13,7 @@ export type AsyncState<T> =
  */
 export function useAsync<T>(load: () => Promise<T>, deps: DependencyList): AsyncState<T> & { reload: () => void } {
   const [state, setState] = useState<AsyncState<T>>({ status: 'loading' });
-  const [nonce, setNonce] = useState(0);
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -26,8 +26,8 @@ export function useAsync<T>(load: () => Promise<T>, deps: DependencyList): Async
     return () => {
       current = false;
     };
-  }, [...deps, nonce]);
+  }, [...deps, reloadCount]);
 
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  const reload = useCallback(() => setReloadCount((n) => n + 1), []);
   return { ...state, reload };
 }

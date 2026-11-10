@@ -29,4 +29,10 @@ export interface Profile {
   display_name: string;
 }
 
+/** What a user submits for a review; the database fills in who and when. */
+export interface ReviewDraft {
+  rating: number;
+  body: string | null;
+}
+
 export type HomeSort = 'newest' | 'rating';

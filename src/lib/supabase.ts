@@ -9,25 +9,18 @@ export const isConfigured = Boolean(url && anonKey);
 
 /**
  * null when the build has no Supabase settings (e.g. a fork without secrets); the UI
- * then shows a setup notice instead of failing.
+ * then shows a setup notice instead of failing. Only lib/api.ts and lib/auth.ts use it.
  *
  * PKCE flow returns auth codes in the query string (?code=…), which coexists with
  * the hash-based router; the implicit flow's #access_token=… would collide with it.
  */
-export const supabase: SupabaseClient | null = isConfigured
+const client: SupabaseClient | null = isConfigured
   ? createClient(url!, anonKey!, {
       auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
     })
   : null;
 
 export function requireSupabase(): SupabaseClient {
-  if (!supabase) throw new Error('Supabase is not configured for this build.');
-  return supabase;
+  if (!client) throw new Error('Supabase is not configured for this build.');
+  return client;
 }
-
-/** The URL auth emails and OAuth providers should send users back to. */
-export function appBaseUrl(): string {
-  return window.location.origin + window.location.pathname;
-}
-
-export const googleAuthEnabled = import.meta.env.VITE_AUTH_GOOGLE === 'true';

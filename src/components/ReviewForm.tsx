@@ -1,18 +1,20 @@
 import { useState, type FormEvent } from 'react';
 import { StarInput } from './Stars.tsx';
-import { REVIEW_BODY_MAX, codePointLength, validateReview } from '../lib/validation.ts';
+import { errorMessage } from '../lib/format.ts';
+import type { ReviewDraft } from '../lib/types.ts';
+import { REVIEW_BODY_MAX, codePointLength, validateReview, type ReviewErrors } from '../lib/validation.ts';
 
 interface Props {
-  initial?: { rating: number; body: string | null };
+  initial?: ReviewDraft;
   submitLabel: string;
-  onSubmit: (rating: number, body: string | null) => Promise<void>;
+  onSubmit: (draft: ReviewDraft) => Promise<void>;
   onCancel?: () => void;
 }
 
 export function ReviewForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
   const [rating, setRating] = useState<number | null>(initial?.rating ?? null);
   const [body, setBody] = useState(initial?.body ?? '');
-  const [errors, setErrors] = useState<{ rating?: string; body?: string; form?: string }>({});
+  const [errors, setErrors] = useState<ReviewErrors & { form?: string }>({});
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -25,9 +27,9 @@ export function ReviewForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     setErrors({});
     setBusy(true);
     try {
-      await onSubmit(result.value.rating, result.value.body);
+      await onSubmit(result.value);
     } catch (err) {
-      setErrors({ form: err instanceof Error ? err.message : 'Could not save your review.' });
+      setErrors({ form: errorMessage(err, 'Could not save your review.') });
     } finally {
       setBusy(false);
     }

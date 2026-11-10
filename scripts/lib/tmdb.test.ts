@@ -34,7 +34,7 @@ describe('selectEnglishFilms', () => {
 });
 
 describe('sgTheatricalDate', () => {
-  it('returns the earliest SG theatrical date, ignoring other countries and digital releases', () => {
+  it('returns the earliest SG theatrical date of a first run, ignoring other countries and digital releases', () => {
     expect(
       sgTheatricalDate({
         results: [
@@ -48,12 +48,28 @@ describe('sgTheatricalDate', () => {
             ],
           },
         ],
-      }),
+      }, '2026-11-01'),
     ).toBe('2026-11-02');
   });
 
+  it('uses the current run for a re-released film', () => {
+    const res = {
+      results: [
+        {
+          iso_3166_1: 'SG',
+          release_dates: [
+            { type: 3, release_date: '1997-12-18T00:00:00.000Z' },
+            { type: 3, release_date: '2026-11-05T00:00:00.000Z' },
+            { type: 3, release_date: '2026-12-20T00:00:00.000Z' },
+          ],
+        },
+      ],
+    };
+    expect(sgTheatricalDate(res, '2026-11-10')).toBe('2026-11-05');
+  });
+
   it('returns null when TMDB has no SG theatrical date', () => {
-    expect(sgTheatricalDate({ results: [] })).toBeNull();
+    expect(sgTheatricalDate({ results: [] }, '2026-11-10')).toBeNull();
   });
 });
 
@@ -128,7 +144,7 @@ describe('TmdbClient + fetchNowShowing', () => {
       },
       calls,
     );
-    const rows = await fetchNowShowing(new TmdbClient({ readToken: 't' }, fetchImpl));
+    const rows = await fetchNowShowing(new TmdbClient('t', fetchImpl), '2026-11-10');
     expect(rows.map((r) => [r.id, r.sg_release_date])).toEqual([
       [1, '2026-11-05'],
       [3, '2026-10-20'],
@@ -143,14 +159,14 @@ describe('TmdbClient + fetchNowShowing', () => {
       seen = { url: String(input), auth: new Headers(init?.headers).get('authorization') };
       return Response.json({ genres: [] });
     }) as typeof fetch;
-    await new TmdbClient({ readToken: 'secret' }, fetchImpl).genreNames();
+    await new TmdbClient('secret', fetchImpl).genreNames();
     expect(seen?.auth).toBe('Bearer secret');
     expect(seen?.url).not.toContain('secret');
   });
 
   it('fails fast on non-retryable errors', async () => {
     const fetchImpl = fakeTmdb({ '/genre/movie/list': new Response('nope', { status: 401 }) });
-    await expect(new TmdbClient({ apiKey: 'k' }, fetchImpl).genreNames()).rejects.toThrow(/HTTP 401/);
+    await expect(new TmdbClient('k', fetchImpl).genreNames()).rejects.toThrow(/HTTP 401/);
   });
 
   it('retries 429 responses honouring Retry-After', async () => {
@@ -159,12 +175,17 @@ describe('TmdbClient + fetchNowShowing', () => {
       ++n === 1
         ? new Response('slow down', { status: 429, headers: { 'retry-after': '0.01' } })
         : Response.json({ genres: [{ id: 1, name: 'Action' }] })) as typeof fetch;
-    const genres = await new TmdbClient({ apiKey: 'k' }, fetchImpl).genreNames();
+    const genres = await new TmdbClient('k', fetchImpl).genreNames();
     expect(genres.get(1)).toBe('Action');
     expect(n).toBe(2);
   });
 
-  it('requires credentials', () => {
-    expect(() => new TmdbClient({})).toThrow(/TMDB_READ_TOKEN/);
+  it('refuses to sync a truncated list when TMDB reports too many pages', async () => {
+    const fetchImpl = fakeTmdb({ '/movie/now_playing?page=1': { page: 1, total_pages: 99, results: [film(1)] } });
+    await expect(new TmdbClient('t', fetchImpl).nowPlayingPages()).rejects.toThrow(/truncated/);
+  });
+
+  it('requires a read token', () => {
+    expect(() => new TmdbClient(undefined)).toThrow(/TMDB_READ_TOKEN/);
   });
 });

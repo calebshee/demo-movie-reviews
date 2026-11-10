@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase.ts';
+import { getSession, onSessionChange, signOut, takeReturnTo } from '../lib/auth.ts';
+import { isConfigured } from '../lib/supabase.ts';
 
 interface AuthState {
   session: Session | null;
@@ -23,33 +25,34 @@ function stripAuthParams() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(Boolean(supabase));
+  const [loading, setLoading] = useState(isConfigured);
+  // Held in a ref so the session bootstrap below runs exactly once.
+  const navigate = useRef(useNavigate());
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!isConfigured) return;
     let active = true;
-    // getSession waits for supabase-js to finish exchanging any ?code= in the URL.
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setLoading(false);
-      stripAuthParams();
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    getSession()
+      .then((s) => {
+        if (!active) return;
+        setSession(s);
+        const returnTo = s ? takeReturnTo() : null;
+        if (returnTo) navigate.current(returnTo, { replace: true });
+      })
+      .catch(() => active && setSession(null))
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+        stripAuthParams();
+      });
+    const unsubscribe = onSessionChange(setSession);
     return () => {
       active = false;
-      data.subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
-  const value: AuthState = {
-    session,
-    user: session?.user ?? null,
-    loading,
-    signOut: async () => {
-      await supabase?.auth.signOut();
-    },
-  };
+  const value: AuthState = { session, user: session?.user ?? null, loading, signOut };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

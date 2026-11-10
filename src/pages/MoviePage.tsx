@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import {
@@ -10,7 +10,15 @@ import {
   listReviews,
   updateReview,
 } from '../lib/api.ts';
-import { backdropUrl, formatRating, formatReleaseDate, formatTimestamp, posterUrl } from '../lib/format.ts';
+import {
+  backdropUrl,
+  errorMessage,
+  formatRating,
+  formatReleaseDate,
+  formatTimestamp,
+  posterUrl,
+  reviewCountLabel,
+} from '../lib/format.ts';
 import type { Movie, Review } from '../lib/types.ts';
 import { useAsync } from '../lib/useAsync.ts';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
@@ -22,9 +30,9 @@ export function MoviePage() {
   const movieId = Number(id);
   const valid = Number.isSafeInteger(movieId) && movieId > 0;
   // Bumped after every review write so the aggregates, my review and the list all refresh.
-  const [version, setVersion] = useState(0);
+  const [writeCount, setWriteCount] = useState(0);
 
-  const movie = useAsync(() => (valid ? getMovie(movieId) : Promise.resolve(null)), [movieId, version]);
+  const movie = useAsync(() => (valid ? getMovie(movieId) : Promise.resolve(null)), [movieId, writeCount]);
 
   if (movie.status === 'error') return <ErrorNotice error={movie.error} onRetry={movie.reload} />;
   if (movie.status === 'success' && !movie.data) {
@@ -44,13 +52,19 @@ export function MoviePage() {
     <MovieDetail
       key={movie.data.id}
       movie={movie.data}
-      version={version}
-      onChanged={() => setVersion((v) => v + 1)}
+      writeCount={writeCount}
+      onChanged={() => setWriteCount((n) => n + 1)}
     />
   );
 }
 
-function MovieDetail({ movie, version, onChanged }: { movie: Movie; version: number; onChanged: () => void }) {
+interface WriteTracking {
+  /** Changes after each review write by this user; dependents refetch when it does. */
+  writeCount: number;
+  onChanged: () => void;
+}
+
+function MovieDetail({ movie, writeCount, onChanged }: { movie: Movie } & WriteTracking) {
   const poster = posterUrl(movie.poster_path, 'w500');
   const backdrop = backdropUrl(movie.backdrop_path);
   return (
@@ -85,7 +99,7 @@ function MovieDetail({ movie, version, onChanged }: { movie: Movie; version: num
                   <div>
                     <Stars value={movie.community_rating} />
                     <p className="meta">
-                      Community rating · {movie.review_count} review{movie.review_count === 1 ? '' : 's'}
+                      Community rating · {reviewCountLabel(movie.review_count)}
                     </p>
                   </div>
                 </div>
@@ -103,20 +117,20 @@ function MovieDetail({ movie, version, onChanged }: { movie: Movie; version: num
         </div>
       </header>
 
-      <MyReview movieId={movie.id} version={version} onChanged={onChanged} />
-      <ReviewList movieId={movie.id} version={version} />
+      <MyReview movieId={movie.id} writeCount={writeCount} onChanged={onChanged} />
+      <ReviewList movieId={movie.id} writeCount={writeCount} />
     </article>
   );
 }
 
-function MyReview({ movieId, version, onChanged }: { movieId: number; version: number; onChanged: () => void }) {
+function MyReview({ movieId, writeCount, onChanged }: { movieId: number } & WriteTracking) {
   const { user, loading } = useAuth();
   const location = useLocation();
   const [editing, setEditing] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const mine = useAsync(
     () => (user ? getMyReview(movieId, user.id) : Promise.resolve(null)),
-    [movieId, user?.id, version],
+    [movieId, user?.id, writeCount],
   );
 
   if (loading) return null;
@@ -141,8 +155,8 @@ function MyReview({ movieId, version, onChanged }: { movieId: number; version: n
         <h2>Write a review</h2>
         <ReviewForm
           submitLabel="Post review"
-          onSubmit={async (rating, body) => {
-            await createReview(movieId, rating, body);
+          onSubmit={async (draft) => {
+            await createReview(movieId, draft);
             onChanged();
           }}
         />
@@ -158,8 +172,8 @@ function MyReview({ movieId, version, onChanged }: { movieId: number; version: n
           initial={review}
           submitLabel="Save changes"
           onCancel={() => setEditing(false)}
-          onSubmit={async (rating, body) => {
-            await updateReview(review.id, rating, body);
+          onSubmit={async (draft) => {
+            await updateReview(review.id, draft);
             setEditing(false);
             onChanged();
           }}
@@ -175,7 +189,7 @@ function MyReview({ movieId, version, onChanged }: { movieId: number; version: n
       await deleteReview(review.id);
       onChanged();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Could not delete your review.');
+      setDeleteError(errorMessage(err, 'Could not delete your review.'));
     }
   }
 
@@ -200,9 +214,15 @@ function MyReview({ movieId, version, onChanged }: { movieId: number; version: n
   );
 }
 
-function ReviewList({ movieId, version }: { movieId: number; version: number }) {
+function ReviewList({ movieId, writeCount }: { movieId: number; writeCount: number }) {
   const [page, setPage] = useState(0);
-  const result = useAsync(() => listReviews(movieId, page), [movieId, page, version]);
+  const result = useAsync(() => listReviews(movieId, page), [movieId, page, writeCount]);
+
+  // A deletion can leave the current page empty; step back to the new last page.
+  const lastPage = result.status === 'success' ? Math.max(0, Math.ceil(result.data.total / REVIEWS_PAGE_SIZE) - 1) : 0;
+  useEffect(() => {
+    if (result.status === 'success' && page > lastPage) setPage(lastPage);
+  }, [result.status, page, lastPage]);
 
   return (
     <section className="reviews">

@@ -1,6 +1,6 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import { requireSupabase } from './supabase.ts';
-import type { HomeSort, Movie, Profile, Review } from './types.ts';
+import type { HomeSort, Movie, Profile, Review, ReviewDraft } from './types.ts';
 import { escapeLike } from './validation.ts';
 
 export const REVIEWS_PAGE_SIZE = 20;
@@ -89,13 +89,17 @@ export async function getMyReview(movieId: number, userId: string): Promise<Revi
 
 // user_id is filled in by the database from the caller's JWT (column default
 // auth.uid()); clients are not even granted the right to set it.
-export async function createReview(movieId: number, rating: number, body: string | null): Promise<void> {
-  unwrap(await requireSupabase().from('reviews').insert({ movie_id: movieId, rating, body }));
+export async function createReview(movieId: number, draft: ReviewDraft): Promise<void> {
+  unwrap(await requireSupabase().from('reviews').insert({ movie_id: movieId, rating: draft.rating, body: draft.body }));
 }
 
-export async function updateReview(reviewId: number, rating: number, body: string | null): Promise<void> {
+export async function updateReview(reviewId: number, draft: ReviewDraft): Promise<void> {
   const rows = unwrap(
-    await requireSupabase().from('reviews').update({ rating, body }).eq('id', reviewId).select('id'),
+    await requireSupabase()
+      .from('reviews')
+      .update({ rating: draft.rating, body: draft.body })
+      .eq('id', reviewId)
+      .select('id'),
   );
   if ((rows as unknown[]).length === 0) throw new Error('That review no longer exists.');
 }

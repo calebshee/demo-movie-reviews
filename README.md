@@ -39,8 +39,8 @@ Anyone can browse; posting, editing or deleting a review requires an account.
 |---|---|
 | `supabase/migrations/` | Schema, triggers, sync function, grants, RLS policies |
 | `scripts/sync-movies.ts` | Daily TMDB → Supabase sync (run by `.github/workflows/sync-movies.yml`) |
-| `src/` | React app (`lib/api.ts` is the only module that talks to Supabase) |
-| `tests/db/` | Migration tests: aggregates, rollback, concurrency, RLS, sync |
+| `src/` | React app. Only `lib/api.ts` (data) and `lib/auth.ts` (sign-in) talk to Supabase; components call those |
+| `tests/db/` | Migration tests against Supabase-like defaults: aggregates, rollback, concurrency, grants/RLS, sync |
 
 ## Setup
 
@@ -81,6 +81,17 @@ gh secret set TMDB_READ_TOKEN
 
 Then **Settings → Pages → Source: GitHub Actions**, run **Actions → Sync now-showing
 films** once by hand, and re-run **Deploy to GitHub Pages**.
+
+## Known limitations
+
+* **Listings are approximate.** TMDB has no showtimes; `now_playing` is a release-date
+  window, so a film can linger a few days after its last screening. Films with no SG
+  date in TMDB sort by their primary release date.
+* **Scheduled workflows pause after 60 days without repository activity** (GitHub
+  policy). Re-enable *Sync now-showing films* under Actions if listings stop updating.
+* **Email confirmation links must be opened in the browser used to sign up** (PKCE).
+  Opened elsewhere, the email is still confirmed; the user just logs in manually.
+* No moderation tools in v1: only authors can edit or delete their own reviews.
 
 ## Local development
 

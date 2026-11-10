@@ -119,6 +119,8 @@ describe('review aggregates are maintained transactionally', () => {
     await expect(addReview(a, 1, 6)).rejects.toThrow(/check/);
     await expect(addReview(a, 1, 0)).rejects.toThrow(/check/);
     await expect(addReview(a, 1, 4, 'x'.repeat(2001))).rejects.toThrow(/check/);
+    await expect(addReview(a, 1, 4, '')).rejects.toThrow(/check/);
+    await expect(addReview(a, 1, 4, ' \n\t ')).rejects.toThrow(/check/);
     expect(await stats(1)).toEqual({ review_count: 0, rating_sum: 0, community_rating: null });
   });
 
@@ -168,6 +170,19 @@ describe('review permissions', () => {
     expect(updated).toHaveLength(0);
     expect(deleted).toHaveLength(0);
     expect(await stats(1)).toMatchObject({ review_count: 1, rating_sum: 5 });
+  });
+
+  it("overrides Supabase's default grants: clients cannot write movies or other users' profiles", async () => {
+    const a = await createUser();
+    for (const [role, uid] of [['anon', null], ['authenticated', a]] as const) {
+      await expect(
+        db.as(role, uid, (q) => q("insert into public.movies (id, title, original_language) values (9, 'x', 'en')")),
+      ).rejects.toThrow(/permission denied/);
+      await expect(db.as(role, uid, (q) => q('delete from public.movies'))).rejects.toThrow(/permission denied/);
+    }
+    await expect(
+      db.as('anon', null, (q) => q("update public.profiles set display_name = 'x'")),
+    ).rejects.toThrow(/permission denied/);
   });
 
   it('does not let users move a review or edit aggregates directly', async () => {

@@ -3,7 +3,8 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider.tsx';
 import { getProfile, updateDisplayName } from '../lib/api.ts';
 import { useAsync } from '../lib/useAsync.ts';
-import { validateDisplayName } from '../lib/validation.ts';
+import { errorMessage } from '../lib/format.ts';
+import { DISPLAY_NAME_MAX, validateDisplayName } from '../lib/validation.ts';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
 
 export function ProfilePage() {
@@ -36,7 +37,7 @@ export function ProfilePage() {
       setName(result.value);
       setMessage({ kind: 'ok', text: 'Saved. Your reviews now show this name.' });
     } catch (err) {
-      setMessage({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save.' });
+      setMessage({ kind: 'error', text: errorMessage(err, 'Could not save.') });
     } finally {
       setBusy(false);
     }
@@ -48,7 +49,7 @@ export function ProfilePage() {
       <form onSubmit={onSubmit}>
         <label className="field">
           <span>Display name (public, shown on your reviews)</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} required />
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={DISPLAY_NAME_MAX} required />
         </label>
         {message && (
           <p className={message.kind === 'ok' ? 'form-info' : 'form-error'} role="status">

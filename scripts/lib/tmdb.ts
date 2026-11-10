@@ -3,9 +3,15 @@
 
 export const TMDB_BASE = 'https://api.themoviedb.org/3';
 export const REGION = 'SG';
-export const LANGUAGE = 'en';
-/** now_playing rarely exceeds ~5 pages for one region; this is just a safety stop. */
-export const MAX_PAGES = 10;
+/** Films kept: those whose *original* language is English. */
+export const ORIGINAL_LANGUAGE = 'en';
+/** Language for titles/overviews/genre names in responses (not a filter). */
+const RESPONSE_LANGUAGE = 'en-US';
+/**
+ * now_playing for one region is normally a handful of pages. Exceeding this throws
+ * rather than truncating, because a truncated list would retire real films.
+ */
+export const MAX_PAGES = 30;
 
 export interface NowPlayingResult {
   id: number;
@@ -49,7 +55,7 @@ export function selectEnglishFilms(pages: NowPlayingPage[]): NowPlayingResult[] 
   const seen = new Map<number, NowPlayingResult>();
   for (const page of pages) {
     for (const film of page.results) {
-      if (film.original_language === LANGUAGE && !seen.has(film.id)) seen.set(film.id, film);
+      if (film.original_language === ORIGINAL_LANGUAGE && !seen.has(film.id)) seen.set(film.id, film);
     }
   }
   return [...seen.values()];
@@ -58,15 +64,25 @@ export function selectEnglishFilms(pages: NowPlayingPage[]): NowPlayingResult[] 
 // TMDB release types: 2 = theatrical (limited), 3 = theatrical.
 const THEATRICAL = new Set([2, 3]);
 
-/** Earliest Singapore theatrical release date (YYYY-MM-DD), or null if TMDB has none. */
-export function sgTheatricalDate(res: ReleaseDatesResponse): string | null {
+/**
+ * The Singapore theatrical date of the *current* run (YYYY-MM-DD): the latest SG
+ * theatrical date on or before `today`, so a re-released classic sorts by its
+ * re-release; otherwise the earliest upcoming one (now_playing includes films opening
+ * within days). null if TMDB has no SG theatrical date.
+ */
+export function sgTheatricalDate(res: ReleaseDatesResponse, today: string): string | null {
   const sg = res.results.find((r) => r.iso_3166_1 === REGION);
   const dates = (sg?.release_dates ?? [])
     .filter((d) => THEATRICAL.has(d.type) && d.release_date)
     .map((d) => d.release_date.slice(0, 10))
     .sort();
-  return dates[0] ?? null;
+  const started = dates.filter((d) => d <= today);
+  return started.at(-1) ?? dates[0] ?? null;
 }
+
+/** Today's date in Singapore as YYYY-MM-DD. */
+export const singaporeToday = (now = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore' }).format(now);
 
 const isoDateOrNull = (s: string | undefined | null) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
 
@@ -82,7 +98,8 @@ export function toMovieRow(
     poster_path: film.poster_path,
     backdrop_path: film.backdrop_path,
     original_language: film.original_language,
-    // Fall back to TMDB's primary release date when there is no SG-specific one.
+    // Best available date for sorting: TMDB's primary release date when it has no
+    // SG-specific one (now_playing?region=SG already established the film is on in SG).
     sg_release_date: sgDate ?? isoDateOrNull(film.release_date),
     genres: film.genre_ids.map((g) => genreNames.get(g)).filter((g): g is string => Boolean(g)),
     tmdb_vote_count: film.vote_count ?? null,
@@ -92,31 +109,21 @@ export function toMovieRow(
 
 export type Fetch = typeof fetch;
 
-export interface TmdbCredentials {
-  /** v4 "API Read Access Token" (preferred). */
-  readToken?: string;
-  /** v3 API key. */
-  apiKey?: string;
-}
-
 export class TmdbClient {
-  private readonly creds: TmdbCredentials;
+  private readonly readToken: string;
   private readonly fetchImpl: Fetch;
 
-  constructor(creds: TmdbCredentials, fetchImpl: Fetch = fetch) {
-    if (!creds.readToken && !creds.apiKey) {
-      throw new Error('Set TMDB_READ_TOKEN (preferred) or TMDB_API_KEY');
-    }
-    this.creds = creds;
+  /** @param readToken TMDB v4 "API Read Access Token" (sent as a bearer header, never in URLs). */
+  constructor(readToken: string | undefined, fetchImpl: Fetch = fetch) {
+    if (!readToken) throw new Error('Set TMDB_READ_TOKEN (TMDB → Settings → API → API Read Access Token)');
+    this.readToken = readToken;
     this.fetchImpl = fetchImpl;
   }
 
   async get<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
     const url = new URL(TMDB_BASE + path);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-    const headers: Record<string, string> = { accept: 'application/json' };
-    if (this.creds.readToken) headers.authorization = `Bearer ${this.creds.readToken}`;
-    else url.searchParams.set('api_key', this.creds.apiKey!);
+    const headers = { accept: 'application/json', authorization: `Bearer ${this.readToken}` };
 
     for (let attempt = 1; ; attempt++) {
       const res = await this.fetchImpl(url, { headers });
@@ -130,19 +137,24 @@ export class TmdbClient {
     }
   }
 
+  /**
+   * Every page of SG now_playing. Fetched one after another (it is only a few pages)
+   * so the result reflects a single walk of the list rather than racing requests.
+   */
   async nowPlayingPages(): Promise<NowPlayingPage[]> {
-    const first = await this.get<NowPlayingPage>('/movie/now_playing', { region: REGION, language: 'en-US', page: 1 });
-    const last = Math.min(first.total_pages, MAX_PAGES);
-    const rest = await Promise.all(
-      Array.from({ length: last - 1 }, (_, i) =>
-        this.get<NowPlayingPage>('/movie/now_playing', { region: REGION, language: 'en-US', page: i + 2 }),
-      ),
-    );
-    return [first, ...rest];
+    const pages: NowPlayingPage[] = [];
+    for (let page = 1; ; page++) {
+      const res = await this.get<NowPlayingPage>('/movie/now_playing', { region: REGION, language: RESPONSE_LANGUAGE, page });
+      pages.push(res);
+      if (res.total_pages > MAX_PAGES) {
+        throw new Error(`now_playing reports ${res.total_pages} pages (limit ${MAX_PAGES}); refusing to sync a truncated list`);
+      }
+      if (page >= res.total_pages) return pages;
+    }
   }
 
   async genreNames(): Promise<Map<number, string>> {
-    const res = await this.get<{ genres: { id: number; name: string }[] }>('/genre/movie/list', { language: 'en-US' });
+    const res = await this.get<{ genres: { id: number; name: string }[] }>('/genre/movie/list', { language: RESPONSE_LANGUAGE });
     return new Map(res.genres.map((g) => [g.id, g.name]));
   }
 
@@ -168,11 +180,11 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Fetches SG now-showing English films and shapes them for sync_now_showing. */
-export async function fetchNowShowing(client: TmdbClient): Promise<MovieRow[]> {
+export async function fetchNowShowing(client: TmdbClient, today = singaporeToday()): Promise<MovieRow[]> {
   const [pages, genres] = await Promise.all([client.nowPlayingPages(), client.genreNames()]);
   const films = selectEnglishFilms(pages);
   return mapLimit(films, 5, async (film) => {
     const dates = await client.releaseDates(film.id);
-    return toMovieRow(film, genres, sgTheatricalDate(dates));
+    return toMovieRow(film, genres, sgTheatricalDate(dates, today));
   });
 }

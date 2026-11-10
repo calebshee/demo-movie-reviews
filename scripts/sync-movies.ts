@@ -4,7 +4,7 @@
 // Env:
 //   SUPABASE_URL               https://<project>.supabase.co
 //   SUPABASE_SERVICE_ROLE_KEY  service role / secret key (never shipped to the browser)
-//   TMDB_READ_TOKEN            TMDB v4 read access token (or TMDB_API_KEY)
+//   TMDB_READ_TOKEN            TMDB v4 API read access token
 //   DRY_RUN=1                  print what would be synced, write nothing
 //
 // Run: npm run sync
@@ -19,10 +19,7 @@ function env(name: string): string {
 }
 
 async function main() {
-  const tmdb = new TmdbClient({
-    readToken: process.env.TMDB_READ_TOKEN?.trim() || undefined,
-    apiKey: process.env.TMDB_API_KEY?.trim() || undefined,
-  });
+  const tmdb = new TmdbClient(process.env.TMDB_READ_TOKEN?.trim() || undefined);
 
   const movies = await fetchNowShowing(tmdb);
   console.log(`TMDB: ${movies.length} English-language films now showing in SG`);

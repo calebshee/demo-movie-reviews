@@ -1,3 +1,5 @@
+import type { ReviewDraft } from './types.ts';
+
 // Client-side checks mirror the database constraints so users get instant feedback;
 // the database remains the authority.
 
@@ -12,12 +14,12 @@ export interface ReviewInput {
   body: string;
 }
 
-export type ReviewValidation =
-  | { ok: true; value: { rating: number; body: string | null } }
-  | { ok: false; errors: { rating?: string; body?: string } };
+export type ReviewErrors = Partial<Record<keyof ReviewDraft, string>>;
+
+export type ReviewValidation = { ok: true; value: ReviewDraft } | { ok: false; errors: ReviewErrors };
 
 export function validateReview(input: ReviewInput): ReviewValidation {
-  const errors: { rating?: string; body?: string } = {};
+  const errors: ReviewErrors = {};
   const { rating } = input;
   if (rating === null || !Number.isInteger(rating) || rating < 1 || rating > 5) {
     errors.rating = 'Pick a rating from 1 to 5 stars.';

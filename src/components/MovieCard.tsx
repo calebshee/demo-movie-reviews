@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Movie } from '../lib/types.ts';
-import { formatRating, formatReleaseDate, posterUrl } from '../lib/format.ts';
+import { formatRating, formatReleaseDate, posterUrl, reviewCountLabel } from '../lib/format.ts';
 
 export function MovieCard({ movie }: { movie: Movie }) {
   const poster = posterUrl(movie.poster_path);
@@ -15,9 +15,7 @@ export function MovieCard({ movie }: { movie: Movie }) {
         <p className="meta">{formatReleaseDate(movie.sg_release_date)}</p>
         <p className="meta">
           <span className="accent">★ {formatRating(movie.community_rating)}</span>{' '}
-          <span>
-            ({movie.review_count} review{movie.review_count === 1 ? '' : 's'})
-          </span>
+          <span>({reviewCountLabel(movie.review_count)})</span>
         </p>
       </div>
     </Link>

@@ -1,10 +1,10 @@
 import { useId } from 'react';
 
 /** Read-only star display for a 1–5 rating (fractional values round to the nearest half). */
-export function Stars({ value, label }: { value: number; label?: string }) {
+export function Stars({ value }: { value: number }) {
   const rounded = Math.round(value * 2) / 2;
   return (
-    <span className="stars" role="img" aria-label={label ?? `${value} out of 5 stars`}>
+    <span className="stars" role="img" aria-label={`${value} out of 5 stars`}>
       {[1, 2, 3, 4, 5].map((i) => (
         <span key={i} className={i <= rounded ? 'star full' : i - 0.5 === rounded ? 'star half' : 'star'} aria-hidden>
           ★

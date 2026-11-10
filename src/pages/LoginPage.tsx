@@ -1,10 +1,28 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider.tsx';
-import { appBaseUrl, googleAuthEnabled, requireSupabase } from '../lib/supabase.ts';
-import { validateDisplayName } from '../lib/validation.ts';
+import { googleAuthEnabled, signIn, signInWithGoogle, signUp } from '../lib/auth.ts';
+import { errorMessage } from '../lib/format.ts';
+import { DISPLAY_NAME_MAX, validateDisplayName } from '../lib/validation.ts';
 
 type Mode = 'signin' | 'signup';
+
+const COPY: Record<Mode, { title: string; submit: string; autocomplete: string; switchPrompt: string; switchTo: string }> = {
+  signin: {
+    title: 'Log in',
+    submit: 'Log in',
+    autocomplete: 'current-password',
+    switchPrompt: 'New here?',
+    switchTo: 'Create an account',
+  },
+  signup: {
+    title: 'Create an account',
+    submit: 'Sign up',
+    autocomplete: 'new-password',
+    switchPrompt: 'Already have an account?',
+    switchTo: 'Log in',
+  },
+};
 
 export function LoginPage() {
   const { user } = useAuth();
@@ -17,6 +35,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const copy = COPY[mode];
 
   if (user) return <Navigate to={from} replace />;
 
@@ -24,25 +43,18 @@ export function LoginPage() {
     e.preventDefault();
     setError(null);
     setInfo(null);
-    const auth = requireSupabase().auth;
     setBusy(true);
     try {
       if (mode === 'signin') {
-        const { error } = await auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await signIn(email, password);
       } else {
         const name = validateDisplayName(displayName);
         if (!name.ok) throw new Error(name.error);
-        const { data, error } = await auth.signUp({
-          email,
-          password,
-          options: { data: { display_name: name.value }, emailRedirectTo: appBaseUrl() },
-        });
-        if (error) throw error;
-        if (!data.session) setInfo('Check your inbox to confirm your email, then log in.');
+        const { needsConfirmation } = await signUp(email, password, name.value);
+        if (needsConfirmation) setInfo('Check your inbox to confirm your email, then log in.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not sign you in.');
+      setError(errorMessage(err, 'Could not sign you in.'));
     } finally {
       setBusy(false);
     }
@@ -50,16 +62,22 @@ export function LoginPage() {
 
   async function onGoogle() {
     setError(null);
-    const { error } = await requireSupabase().auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: appBaseUrl() },
-    });
-    if (error) setError(error.message);
+    try {
+      await signInWithGoogle(from);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not start Google sign-in.'));
+    }
+  }
+
+  function switchMode() {
+    setMode(mode === 'signin' ? 'signup' : 'signin');
+    setError(null);
+    setInfo(null);
   }
 
   return (
     <section className="auth-card">
-      <h1>{mode === 'signin' ? 'Log in' : 'Create an account'}</h1>
+      <h1>{copy.title}</h1>
       <p className="meta">You need an account to post reviews. Reading is open to everyone.</p>
 
       {googleAuthEnabled && (
@@ -77,7 +95,12 @@ export function LoginPage() {
         {mode === 'signup' && (
           <label className="field">
             <span>Display name (shown on your reviews)</span>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={50} required />
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
+              required
+            />
           </label>
         )}
         <label className="field">
@@ -88,7 +111,7 @@ export function LoginPage() {
           <span>Password</span>
           <input
             type="password"
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+            autoComplete={copy.autocomplete}
             minLength={mode === 'signup' ? 8 : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -106,22 +129,14 @@ export function LoginPage() {
           </p>
         )}
         <button type="submit" className="btn primary wide" disabled={busy}>
-          {busy ? 'Please wait…' : mode === 'signin' ? 'Log in' : 'Sign up'}
+          {busy ? 'Please wait…' : copy.submit}
         </button>
       </form>
 
       <p className="switch">
-        {mode === 'signin' ? 'New here?' : 'Already have an account?'}{' '}
-        <button
-          type="button"
-          className="link"
-          onClick={() => {
-            setMode(mode === 'signin' ? 'signup' : 'signin');
-            setError(null);
-            setInfo(null);
-          }}
-        >
-          {mode === 'signin' ? 'Create an account' : 'Log in'}
+        {copy.switchPrompt}{' '}
+        <button type="button" className="link" onClick={switchMode}>
+          {copy.switchTo}
         </button>
       </p>
     </section>

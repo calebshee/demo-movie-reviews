@@ -1,9 +1,9 @@
-const IMG = 'https://image.tmdb.org/t/p';
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
-export const posterUrl = (path: string | null, size: 'w185' | 'w342' | 'w500' = 'w342') =>
-  path ? `${IMG}/${size}${path}` : null;
+export const posterUrl = (path: string | null, size: 'w342' | 'w500' = 'w342') =>
+  path ? `${TMDB_IMAGE_BASE}/${size}${path}` : null;
 
-export const backdropUrl = (path: string | null) => (path ? `${IMG}/w1280${path}` : null);
+export const backdropUrl = (path: string | null) => (path ? `${TMDB_IMAGE_BASE}/w1280${path}` : null);
 
 const dateFmt = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat('en-SG', { dateStyle: 'medium', timeZone: 'Asia/Singapore' });
@@ -18,3 +18,9 @@ export function formatReleaseDate(iso: string | null): string {
 export const formatTimestamp = (iso: string) => dateTimeFmt.format(new Date(iso));
 
 export const formatRating = (n: number | null) => (n === null ? '–' : n.toFixed(1));
+
+export const reviewCountLabel = (n: number) => `${n.toLocaleString()} review${n === 1 ? '' : 's'}`;
+
+/** Message to show for a caught value of unknown type. */
+export const errorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error && err.message ? err.message : fallback;

@@ -44,6 +44,12 @@ create function auth.uid() returns uuid language sql stable as $fn$
 $fn$;
 grant usage on schema public, auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+
+-- Supabase's defaults: every new table/function/sequence in public is fully granted to
+-- the API roles. Reproducing them proves the migration's revokes actually take effect.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 `;
 
 const RESET = `

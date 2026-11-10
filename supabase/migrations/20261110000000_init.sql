@@ -53,7 +53,8 @@ create table public.reviews (
   movie_id   bigint not null references public.movies (id) on delete cascade,
   user_id    uuid not null default auth.uid() references public.profiles (id) on delete cascade,
   rating     smallint not null check (rating between 1 and 5),
-  body       text check (body is null or char_length(body) <= 2000),
+  -- Optional text, but never blank: clients send null for "no text".
+  body       text check (body is null or (char_length(body) <= 2000 and body ~ '\S')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint reviews_one_per_user_per_movie unique (user_id, movie_id)
